@@ -41,7 +41,7 @@ insert_left:
     sw x10,4(x5) # root->left=result
     beq x0,x0,insert_return_root
  
-right:
+insert_right:
     lw x5,8(x2) # root
     lw x10,8(x5) # root->right
     lw x11,4(x2) # val
@@ -49,10 +49,10 @@ right:
     lw x5,8(x2) # root
     sw x10,8(x5) # root->right=result
  
-return_root:
+insert_return_root:
     lw x10,8(x2) # return root
  
-done:
+insert_done:
     lw x1,12(x2)
     addi x2,x2,16
     jalr x0,x1,0
