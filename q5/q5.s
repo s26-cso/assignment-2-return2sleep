@@ -4,111 +4,117 @@ yes_msg: .string "Yes\n"
 no_msg: .string "No\n"
 
 .section .bss
-lbuf: .space 1  # holds the left character
-rbuf: .space 1  # holds the right character
+lbuf: .space 1
+rbuf: .space 1
 
 .section .text
 .global _start
 
 _start:
-    # open input.txt
-    li a7,56
-    li a0,-100
-    la a1,filename
-    li a2,0
-    li a3,0
+    # Open input.txt (sys_openat: 56)
+    li a7, 56
+    li a0, -100     # AT_FDCWD
+    la a1, filename
+    li a2, 0        # O_RDONLY
+    li a3, 0
     ecall
-    mv s0,a0  # save the file descriptor in s0
+    bltz a0, not_palindrome # Exit if file can't be opened
+    mv s0, a0       # s0 = file descriptor
 
-    # jump to the end of file
-    li a7,62
-    mv a0,s0
-    li a1,0
-    li a2,2         # seek end
+    # Find file size (sys_lseek: 62)
+    li a7, 62
+    mv a0, s0
+    li a1, 0
+    li a2, 2        # SEEK_END
     ecall
-    mv s1,a0        # s1=file size
+    mv s1, a0       # s1 = total file size
 
-    beqz s1,is_palindrome   #trivial case
+    # Handle empty file or single char
+    li t0, 1
+    ble s1, t0, is_palindrome
 
-    # peek at the last character if it's a newline, ignore it
-    addi t0,s1,-1
-    li a7,62
-    mv a0,s0
-    mv a1,t0
-    li a2,0
+    # Adjust for trailing newline if present
+    li a7, 62
+    mv a0, s0
+    li a1, -1
+    li a2, 2        # SEEK_END (1 byte back from end)
     ecall
-    li a7,63
-    mv a0,s0
-    la a1,lbuf
-    li a2,1
+    
+    li a7, 63       # sys_read
+    mv a0, s0
+    la a1, rbuf
+    li a2, 1
     ecall
-    la t0,lbuf
-    lb t1,0(t0)
-    li t2,10        # '\n'
-    bne t1,t2,set_ptrs
-    addi s1,s1,-1   # chop off the newline
+    
+    lb t0, rbuf
+    li t1, 10       # ASCII newline
+    bne t0, t1, init_pointers
+    addi s1, s1, -1 # Exclude newline from palindrome check
 
-set_ptrs:
-    li s2,0         # left pointer starts at the beginning
-    addi s3,s1,-1   # right pointer starts at the end
+init_pointers:
+    li s2, 0        # s2 = Left pointer index
+    addi s3, s1, -1 # s3 = Right pointer index (last valid char)
 
 loop:
-    # pointers have met in the middle, everything matched
-    bge s2,s3,is_palindrome
+    bge s2, s3, is_palindrome
 
-    # go to the left pointer and read one character
-    li a7,62
-    mv a0,s0
-    mv a1,s2
-    li a2,0
-    ecall
-    li a7,63
-    mv a0,s0
-    la a1,lbuf
-    li a2,1
+    # Read character at Left pointer
+    li a7, 62
+    mv a0, s0
+    mv a1, s2
+    li a2, 0        # SEEK_SET
     ecall
 
-    # go to the right pointer and read one character
-    li a7,62
-    mv a0,s0
-    mv a1,s3
-    li a2,0
+    li a7, 63
+    mv a0, s0
+    la a1, lbuf
+    li a2, 1
     ecall
-    li a7,63
-    mv a0,s0
-    la a1,rbuf
-    li a2,1
+    lb s4, lbuf
+
+    # Read character at Right pointer
+    li a7, 62
+    mv a0, s0
+    mv a1, s3
+    li a2, 0        # SEEK_SET
     ecall
 
-    # check if the two characters match
-    la t0,lbuf
-    lb s4,0(t0)
-    la t0,rbuf
-    lb s5,0(t0)
+    li a7, 63
+    mv a0, s0
+    la a1, rbuf
+    li a2, 1
+    ecall
+    lb s5, rbuf
 
-    bne s4,s5,not_palindrome   # mismatch found
+    # Compare characters
+    bne s4, s5, not_palindrome
 
-    # move both pointers inward and check the next pair
-    addi s2,s2,1
-    addi s3,s3,-1
+    addi s2, s2, 1
+    addi s3, s3, -1
     j loop
 
 is_palindrome:
-    li a7,64
-    li a0,1
-    la a1,yes_msg
-    li a2,4
+    li a7, 64       # sys_write
+    li a0, 1        # stdout
+    la a1, yes_msg
+    li a2, 4
     ecall
-    j done
+    j exit
 
 not_palindrome:
-    li a7,64
-    li a0,1
-    la a1,no_msg
-    li a2,3
+    li a7, 64       # sys_write
+    li a0, 1        # stdout
+    la a1, no_msg
+    li a2, 3
     ecall
 
-done:
-    li a7,93 
-    li a0,0
+exit:
+    # Close file
+    li a7, 57       # sys_close
+    mv a0, s0
+    ecall
+
+    # Exit program
+    li a7, 93       # sys_exit
+    li a0, 0
     ecall
